@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Custom Counter</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="counter-container">
+    <div class="counter">
+      <div class="display">
+        <span class="total-amount">$0</span>
+        <h1 class="title">自家研發五元數錢機</h1>
+        
+      </div>
+      <div class="buttons">
+        <button class="btn add-amount-5">$5</button>
+        <button class="btn add-amount-25">$25</button>
+        <button class="btn add-amount-50">$50</button>
+        <button class="btn add-to-total">加入</button>
+        <button class="btn clear-total">清空</button>
+      </div>
+      <div class="counter-info">
+        $5 按次数：<span class="count-5">0</span> <button class="btn delete-5 delete-btn">删除</button><br>
+        $25 按次数：<span class="count-25">0</span> <button class="btn delete-25 delete-btn">删除</button><br>
+        $50 按次数：<span class="count-50">0</span> <button class="btn delete-50 delete-btn">删除</button>
+      </div>
+    </div>
+      <div class="login-container">
+    <h1>Login</h1>
+    <form id="login-form">
+      <label for="username">Username:</label>
+      <input type="text" id="username" name="username" required>
+      <label for="password">Password:</label>
+      <input type="password" id="password" name="password" required>
+      <label for="captcha">Verification Code:</label>
+      <div class="captcha-container">
+        <input type="text" id="captcha" name="captcha" required>
+        <span id="captcha-display"></span>
+      </div>
+      <button type="submit">Login</button>
+    </form>
+      </div>
+  </div>
+    
+
+  <script src="script.js"></script>
+</body>
+</html>
