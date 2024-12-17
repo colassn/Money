@@ -10,6 +10,7 @@
             width: 100%;
             max-width: 600px;
             margin: auto;
+            border: 1px solid black;
         }
     </style>
 </head>
@@ -20,21 +21,19 @@
 
     <script>
         function onScanSuccess(qrCodeMessage) {
-            // 二維碼掃描成功時的處理
             document.getElementById('result').innerText = "掃描結果: " + qrCodeMessage;
         }
 
         function onScanError(errorMessage) {
-            // 二維碼掃描錯誤時的處理
             console.warn(`掃描錯誤: ${errorMessage}`);
         }
 
         const html5QrCode = new Html5Qrcode("reader");
         html5QrCode.start(
-            { facingMode: "environment" }, // 使用後置攝像頭
+            { facingMode: { exact: "environment" } }, // 使用後置攝像頭
             {
-                fps: 10, // 每秒幀數
-                qrbox: 250 // 二維碼掃描框大小
+                fps: 10,
+                qrbox: { width: 250, height: 250 } // 二維碼掃描框大小
             },
             onScanSuccess,
             onScanError)
