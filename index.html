@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Money Counter VisionOS</title>
+  
+  <!-- 1. 核心庫 (使用最穩定的 CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    /* --- 基礎設定 --- */
+    body, html { 
+      background-color: #F5F5F7; 
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+      margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; 
+      touch-action: none; -webkit-user-select: none; user-select: none;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    /* --- 高級動畫 --- */
+    
+    /* 背景流動 */
+    @keyframes blob-float {
+      0% { transform: translate(0px, 0px) scale(1); }
+      33% { transform: translate(30px, -50px) scale(1.1); }
+      66% { transform: translate(-20px, 20px) scale(0.9); }
+      100% { transform: translate(0px, 0px) scale(1); }
+    }
+    .animate-blob { animation: blob-float 20s infinite ease-in-out; }
+    
+    /* 紙幣流光 */
+    @keyframes shine-pass { 
+      0% { left: -100%; opacity: 0; } 
+      50% { opacity: 0.4; } 
+      100% { left: 200%; opacity: 0; } 
+    }
+
+    /* 數字心跳 */
+    @keyframes number-pop {
+      0% { transform: scale(1); }
+      40% { transform: scale(1.15); text-shadow: 0 0 20px rgba(37,99,235,0.3); color: #2563eb; }
+      100% { transform: scale(1); }
+    }
+    .animate-pop { animation: number-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+
+    /* 列表進場 */
+    @keyframes slide-up-fade {
+      from { opacity: 0; transform: translateY(30px) scale(0.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .animate-enter { animation: slide-up-fade 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; opacity: 0; }
+
+    /* --- 玻璃質感 UI --- */
+    
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.65);
+      backdrop-filter: blur(25px) saturate(180%);
+      -webkit-backdrop-filter: blur(25px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.08);
+    }
+    
+    .glass-button {
+      background: rgba(255, 255, 255, 0.5);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06);
+      transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+      cursor: pointer;
+      color: #374151;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .glass-button:active {
+      background: rgba(255, 255, 255, 0.95);
+      transform: scale(0.9);
+      box-shadow: 0 0 0 rgba(0,0,0,0), inset 0 2px 5px rgba(0,0,0,0.05);
+      border-color: #fff;
+    }
+
+    /* 液態鍵盤按鈕 */
+    .glass-btn-liquid {
+      background: rgba(255, 255, 255, 0.4); 
+      backdrop-filter: blur(15px);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+      color: #1f2937;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .glass-btn-liquid:active {
+      background: rgba(255, 255, 255, 0.9);
+      transform: scale(0.92);
+      box-shadow: 0 0 20px rgba(255,255,255,0.6);
+    }
+
+    /* 全像紙幣 */
+    .holo-note {
+      position: relative; overflow: hidden;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08), inset 0 0 0 1px rgba(255,255,255,0.2);
+    }
+    .holo-note::after {
+      content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%;
+      background: linear-gradient(to right, transparent, rgba(255,255,255,0.5), transparent);
+      transform: skewX(-25deg); animation: shine-pass 3s infinite ease-in-out;
+    }
+
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .pt-safe { padding-top: env(safe-area-inset-top); }
+    .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+    .clip-scallop { clip-path: polygon(50% 0%, 61% 2%, 71% 7%, 80% 15%, 87% 24%, 92% 34%, 95% 45%, 95% 57%, 92% 67%, 86% 77%, 78% 85%, 68% 91%, 57% 95%, 45% 97%, 34% 96%, 23% 92%, 14% 85%, 7% 77%, 2% 66%, 0% 55%, 1% 43%, 5% 32%, 11% 22%, 19% 13%, 29% 6%, 40% 1%); }
+  </style>
+</head>
+<body>
+  <!-- 載入畫面 -->
+  <div id="loading" style="position:fixed;inset:0;display:flex;justify-content:center;align-items:center;background:#F5F5F7;z-index:9999;transition:opacity 0.5s;">
+    <div style="width:40px;height:40px;border:4px solid #e5e7eb;border-top-color:#3b82f6;border-radius:50%;animation:spin 1s linear infinite;"></div>
+    <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+  </div>
+  
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+    // 移除載入畫面
+    setTimeout(() => {
+        const el = document.getElementById('loading');
+        if(el) { el.style.opacity = 0; setTimeout(() => el.remove(), 500); }
+    }, 500);
+
+    // ==========================================
+    // 1. 內建圖標 (Inline SVG) - 解決白屏關鍵
+    // ==========================================
+    const IconBase = ({ children, size = 24, className = "" }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
+    );
+
+    const RotateCcw = (p) => <IconBase {...p}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></IconBase>;
+    const Copy = (p) => <IconBase {...p}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></IconBase>;
+    const Check = (p) => <IconBase {...p}><path d="M20 6 9 17l-5-5"/></IconBase>;
+    const Wallet = (p) => <IconBase {...p}><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></IconBase>;
+    const Banknote = (p) => <IconBase {...p}><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></IconBase>;
+    const Sparkles = (p) => <IconBase {...p}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 5H5"/><path d="M19 16v4"/><path d="M23 18h-4"/></IconBase>;
+    const LayoutGrid = (p) => <IconBase {...p}><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></IconBase>;
+    const Lock = (p) => <IconBase {...p}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></IconBase>;
+    const Unlock = (p) => <IconBase {...p}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></IconBase>;
+    const Minus = (p) => <IconBase {...p}><path d="M5 12h14"/></IconBase>;
+    const Plus = (p) => <IconBase {...p}><path d="M5 12h14M12 5v14"/></IconBase>;
+    const Delete = (p) => <IconBase {...p}><path d="M20 5H9l-7 7 7 7h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z"/><line x1="18" x2="12" y1="9" y2="15"/><line x1="12" x2="18" y1="9" y2="15"/></IconBase>;
+    const ArrowDown = (p) => <IconBase {...p}><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></IconBase>;
+    const Trash2 = (p) => <IconBase {...p}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></IconBase>;
+
+    const LOGO_URL = "https://i.ibb.co/1Yf4N9qy/pack-icon-20240802-010959-0000.png";
+
+    // --- 2. 視覺背景 ---
+    const LiquidBackground = () => (
+      <div className="fixed inset-0 z-0 bg-[#F5F5F7] overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[80vw] h-[80vw] bg-blue-200/40 rounded-full blur-[100px] animate-blob mix-blend-multiply"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[80vw] h-[80vw] bg-purple-200/40 rounded-full blur-[100px] animate-blob mix-blend-multiply" style={{animationDelay: '2s'}}></div>
+        <div className="absolute top-[40%] left-[30%] w-[60vw] h-[60vw] bg-cyan-200/40 rounded-full blur-[100px] animate-blob mix-blend-multiply" style={{animationDelay: '4s'}}></div>
+      </div>
+    );
+
+    // --- 3. 動態數字 (Heartbeat) ---
+    const AnimatedNumber = ({ value, className }) => {
+      const [animate, setAnimate] = useState(false);
+      const prev = useRef(value);
+      useEffect(() => { 
+        if (value !== prev.current) { 
+          setAnimate(true); 
+          const t = setTimeout(()=>setAnimate(false), 300); 
+          prev.current = value; 
+          return () => clearTimeout(t);
+        } 
+      }, [value]);
+      return (
+        <span className={`transition-all duration-200 inline-block font-mono tracking-tight ${className} ${animate ? 'animate-pop' : ''}`}>
+          ${value.toLocaleString(undefined, { minimumFractionDigits: value % 1 === 0 ? 0 : 1 })}
+        </span>
+      );
+    };
+
+    // 底部總額欄
+    const TotalBar = ({ total, label = "Total Assets", className="" }) => (
+      <div className={`glass-panel rounded-[2rem] p-4 flex justify-between items-center w-full ${className}`}>
+        <div className="flex flex-col">
+          <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-0.5">{label}</span>
+          <AnimatedNumber value={total} className="text-4xl font-black text-gray-800" />
+        </div>
+        <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center border border-white shadow-sm transition-transform active:scale-75 duration-200">
+          <Wallet className="text-blue-600" size={24} />
+        </div>
+      </div>
+    );
+
+    // 鎖定開關
+    const LockToggle = ({ isLocked, onToggle }) => (
+        <button onClick={onToggle} className={`p-2 rounded-lg transition-all duration-300 ${isLocked ? 'bg-rose-100 text-rose-500 scale-90' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}>
+            {isLocked ? <Lock size={16} className="fill-current" /> : <Unlock size={16} />}
+        </button>
+    );
+
+    // 硬幣渲染 (修復文字顏色)
+    const HKDCoin = React.memo(({ value, label, size }) => {
+      if (value === 10) return <div className={`${size} rounded-full border-[1px] border-gray-300 metallic-silver shadow-lg flex items-center justify-center relative overflow-hidden`}><div className="absolute inset-[18%] rounded-full metallic-gold border border-yellow-600/30 flex items-center justify-center shadow-inner"><span className="relative z-10 font-black text-yellow-900 text-xs">{label}</span></div></div>;
+      if (value === 5) return <div className={`${size} rounded-full border-[3px] border-gray-300 metallic-silver flex items-center justify-center`}><div className="w-[85%] h-[85%] rounded-full border border-gray-400/30 flex items-center justify-center"><span className="font-black text-gray-700 text-[70%] drop-shadow-sm">{label}</span></div></div>;
+      if (value === 2 || value === 0.2) {
+        const bgClass = value === 2 ? "metallic-gold" : "metallic-bronze";
+        const textClass = value === 2 ? "text-yellow-900" : "text-orange-900";
+        return <div className={`${size} relative flex items-center justify-center drop-shadow-lg`}><svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-md"><path d="M50 2 C54 2 57 5 59 8 C62 11 66 12 69 10 C73 8 77 9 79 13 C81 16 85 18 88 18 C92 18 95 21 95 25 C96 29 98 32 97 36 C96 40 98 44 100 47 C102 51 100 55 98 58 C96 61 96 65 97 69 C98 73 96 76 93 79 C90 81 89 85 88 89 C86 92 83 94 79 94 C75 95 72 97 69 100 C65 102 61 100 58 98 C55 96 51 96 47 97 C43 98 40 96 37 93 C34 90 30 89 27 90 C23 91 20 89 18 85 C16 82 12 80 10 79 C7 77 5 73 6 69 C7 65 5 61 2 58 C-1 55 -1 51 2 47 C5 44 5 40 4 36 C3 32 5 28 9 26 C12 23 14 19 16 16 C19 13 23 12 26 14 C29 16 33 15 36 12 C39 9 43 8 46 10 C48 11 50 2 50 2 Z" fill="url(#grad_scallop)" stroke="rgba(0,0,0,0.1)" strokeWidth="1"/><defs><linearGradient id="grad_scallop" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor={value===2?"#fef08a":"#fdba74"} /><stop offset="100%" stopColor={value===2?"#eab308":"#c2410c"} /></linearGradient></defs></svg><span className={`absolute font-black ${textClass} text-xs`}>{label}</span></div>;
+      }
+      if (value === 1) return <div className={`${size} rounded-full metallic-silver border border-gray-400/30 flex items-center justify-center`}><span className="font-black text-gray-700 text-xs">{label}</span></div>;
+      return <div className={`${size} rounded-full metallic-bronze border border-orange-800/20 flex items-center justify-center`}><span className="font-black text-orange-900 text-[65%]">{label}</span></div>;
+    });
+
+    const NOTE_DATA = [
+      { value: 1000, label: '1000', bg: 'bg-gradient-to-br from-yellow-300/80 to-yellow-500/60', border: 'border-yellow-400/50', text: 'text-yellow-900', width:'w-36', height:'h-16' },
+      { value: 500, label: '500', bg: 'bg-gradient-to-br from-amber-500/80 to-amber-700/60', border: 'border-amber-600/50', text: 'text-white', width:'w-36', height:'h-16' },
+      { value: 100, label: '100', bg: 'bg-gradient-to-br from-red-400/80 to-red-600/60', border: 'border-red-500/50', text: 'text-white', width:'w-36', height:'h-16' },
+      { value: 50, label: '50', bg: 'bg-gradient-to-br from-emerald-400/80 to-emerald-600/60', border: 'border-emerald-500/50', text: 'text-white', width:'w-36', height:'h-16' },
+      { value: 20, label: '20', bg: 'bg-gradient-to-br from-blue-400/80 to-blue-600/60', border: 'border-blue-500/50', text: 'text-white', width:'w-36', height:'h-16' },
+      { value: 10, label: '10', bg: 'bg-gradient-to-br from-purple-400/80 to-purple-600/60', border: 'border-purple-500/50', text: 'text-white', width:'w-36', height:'h-16' },
+    ];
+    const COIN_DATA = [
+      { value: 10, label: '$10', isCoin: true, size: 'w-14 h-14' },
+      { value: 5, label: '$5', isCoin: true, size: 'w-12 h-12' },
+      { value: 2, label: '$2', isCoin: true, size: 'w-11 h-11' },
+      { value: 1, label: '$1', isCoin: true, size: 'w-10 h-10' },
+      { value: 0.5, label: '5毫', isCoin: true, size: 'w-9 h-9' },
+      { value: 0.2, label: '2毫', isCoin: true, size: 'w-8 h-8' },
+      { value: 0.1, label: '1毫', isCoin: true, size: 'w-8 h-8' },
+    ];
+
+    // --- 分頁 1: Standard ---
+    const StandardPanel = ({ denoms, isVisible }) => {
+      const DATA_SET = useMemo(() => denoms.map(d => ({ ...d, id: d.isCoin ? `c${d.value}` : `n${d.value}` })), [denoms]);
+      const [counts, setCounts] = useState({});
+      const [locks, setLocks] = useState({});
+      const [total, setTotal] = useState(0);
+
+      useEffect(() => { const i = {}; DATA_SET.forEach(d => i[d.id] = ''); setCounts(i); }, [DATA_SET]);
+      useEffect(() => { let t = 0; DATA_SET.forEach(d => t += (parseInt(counts[d.id]) || 0) * d.value); setTotal(t); }, [counts, DATA_SET]);
+
+      const toggleLock = (id) => setLocks(prev => ({ ...prev, [id]: !prev[id] }));
+      const updateCount = (id, delta) => {
+        if (locks[id]) return;
+        if (navigator.vibrate) navigator.vibrate(5);
+        setCounts(prev => {
+          const val = parseInt(prev[id]) || 0;
+          const newVal = Math.max(0, val + delta);
+          return { ...prev, [id]: newVal === 0 ? '' : newVal };
+        });
+      };
+      const handleInput = (id, val) => { if (locks[id]) return; if (val === '') { setCounts(prev => ({ ...prev, [id]: '' })); return; } const intVal = parseInt(val); if (!isNaN(intVal) && intVal >= 0) { setCounts(prev => ({ ...prev, [id]: intVal })); } };
+      
+      const handleClearAll = () => {
+        if(navigator.vibrate) navigator.vibrate(20);
+        if(window.confirm("確定要全部清除嗎？")) {
+          const initialCounts = {};
+          DATA_SET.forEach(d => initialCounts[d.id] = '');
+          setCounts(initialCounts);
+        }
+      };
+
+      if (!isVisible) return null;
+
+      return (
+        <div className="absolute top-[120px] bottom-0 w-full flex flex-col">
+          {/* 列表區域 - 向上延伸消除空白 */}
+          <div className="flex-1 overflow-y-auto px-4 pt-4 pb-32 space-y-3 no-scrollbar">
+            {/* 清除按鈕置頂 */}
+            <div className="mb-2">
+               <button onClick={handleClearAll} className="w-full h-12 rounded-xl glass-button gap-2 text-sm font-bold text-rose-600 bg-rose-50/50 border-rose-200 hover:bg-rose-100/80 transition-all active:scale-95 shadow-sm">
+                 <Trash2 size={20} /> CLEAR ALL
+               </button>
+            </div>
+
+            {DATA_SET.map((d, idx) => {
+              const count = parseInt(counts[d.id]) || 0;
+              const isLocked = locks[d.id];
+              const delay = `${idx * 50}ms`;
+              return (
+                <div key={d.id} className={`glass-panel rounded-3xl p-3 transition-all duration-500 animate-enter ${count > 0 ? 'bg-white/80 border-blue-200 shadow-lg scale-[1.01]' : 'bg-white/40'} ${isLocked ? 'opacity-60 grayscale bg-gray-100/50' : ''}`} style={{animationDelay: delay}}>
+                   <div className="flex justify-between items-center mb-3">
+                      <div className="flex items-center gap-4">
+                        <div className="w-20 flex justify-center shrink-0 transform transition-transform hover:scale-110">
+                          {d.isCoin ? <HKDCoin {...d} size="w-12 h-12" /> : <div className={`w-16 h-9 rounded-lg shadow-md flex items-center justify-center font-bold text-lg holo-note ${d.bg} ${d.text} ${d.border}`}>{d.label}</div>}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Subtotal</span>
+                          <span className="text-xl font-mono font-bold text-gray-800">${(count * d.value).toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center bg-gray-100/50 rounded-xl p-1 border border-gray-200/50">
+                         <LockToggle isLocked={isLocked} onToggle={() => toggleLock(d.id)} />
+                         <input type="number" value={counts[d.id]} readOnly={isLocked} onChange={(e)=>handleInput(d.id, e.target.value)} className="w-12 text-center font-mono text-xl font-bold text-gray-700 bg-transparent outline-none" placeholder="0"/>
+                      </div>
+                   </div>
+                   <div className={`grid grid-cols-4 gap-2 ${isLocked ? 'pointer-events-none opacity-20' : ''}`}>
+                      <button onClick={()=>updateCount(d.id, -1)} className="glass-button h-10 rounded-lg flex items-center justify-center text-gray-500 hover:bg-white hover:text-red-500"><Minus size={18}/></button>
+                      <button onClick={()=>updateCount(d.id, 1)} className="glass-button h-10 rounded-lg font-bold text-blue-600 bg-blue-50/50 border-blue-100 hover:bg-blue-100">+1</button>
+                      <button onClick={()=>updateCount(d.id, 5)} className="glass-button h-10 rounded-lg font-bold text-indigo-600 bg-indigo-50/50 border-indigo-100 hover:bg-indigo-100">+5</button>
+                      <button onClick={()=>updateCount(d.id, 10)} className="glass-button h-10 rounded-lg font-bold text-purple-600 bg-purple-50/50 border-purple-100 hover:bg-purple-100">+10</button>
+                   </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="absolute bottom-0 left-0 w-full px-4 pb-6 pt-12 bg-gradient-to-t from-white/90 via-white/50 to-transparent pointer-events-none z-30">
+             <TotalBar total={total} />
+          </div>
+        </div>
+      );
+    };
+
+    // --- 分頁 2: Calculator ---
+    const CalculatorPanel = ({ denoms, title, isVisible }) => {
+      const DATA_SET = useMemo(() => denoms.map(d => ({ ...d, id: `n${d.value}` })), [denoms]);
+      const [counts, setCounts] = useState({});
+      const [locks, setLocks] = useState({});
+      const [activeId, setActiveId] = useState('n1000');
+      const [total, setTotal] = useState(0);
+      const [keypadHeight, setKeypadHeight] = useState(window.innerHeight * 0.35);
+      const isDrag = useRef(false);
+
+      useEffect(() => { const i={}; DATA_SET.forEach(d=>i[d.id]=''); setCounts(i); }, [DATA_SET]);
+      useEffect(() => { let t=0; DATA_SET.forEach(d => t += (parseInt(counts[d.id]) || 0) * d.value); setTotal(t); }, [counts, DATA_SET]);
+      
+      const activeItem = denoms.find(d => `n${d.value}` === activeId) || denoms[0];
+      const isLocked = locks[activeId];
+
+      const handleDrag = (e) => { if(!isDrag.current) return; const y = e.touches ? e.touches[0].clientY : e.clientY; setKeypadHeight(Math.max(250, window.innerHeight - y)); };
+      useEffect(() => { window.addEventListener('mousemove', handleDrag); window.addEventListener('mouseup', ()=>isDrag.current=false); window.addEventListener('touchmove', handleDrag); window.addEventListener('touchend', ()=>isDrag.current=false); return () => { window.removeEventListener('mousemove', handleDrag); window.removeEventListener('touchmove', handleDrag); } }, []);
+
+      const numClick = (n) => { if(!isLocked) { if(navigator.vibrate) navigator.vibrate(15); setCounts(p => ({...p, [activeId]: (p[activeId]||'') + n})) } };
+      const delClick = () => { if(!isLocked) { if(navigator.vibrate) navigator.vibrate(15); setCounts(p => ({...p, [activeId]: (p[activeId]||'').slice(0,-1)})) } };
+      const clearClick = () => { if(!isLocked) { if(navigator.vibrate) navigator.vibrate(15); setCounts(p => ({...p, [activeId]: ''})) } };
+      const nextClick = () => {
+         if(navigator.vibrate) navigator.vibrate(15);
+         const idx = DATA_SET.findIndex(d => d.id === activeId);
+         const next = DATA_SET[(idx + 1) % DATA_SET.length];
+         setActiveId(next.id);
+         document.getElementById(`row-${next.id}`)?.scrollIntoView({behavior:'smooth', block:'center'});
+      };
+      
+      const toggleLock = (id) => setLocks(prev => ({ ...prev, [id]: !prev[id] }));
+
+      if (!isVisible) return null;
+
+      return (
+        <div className="absolute top-[120px] bottom-0 w-full flex flex-col">
+          <div className="flex-1 overflow-y-auto px-4 pt-8 pb-4 space-y-2 no-scrollbar" style={{marginBottom: keypadHeight}}>
+            {DATA_SET.map((d, idx) => {
+               const id = d.id;
+               const active = activeId === id;
+               const delay = `${idx * 50}ms`;
+               return (
+                 <div key={id} id={`row-${id}`} onClick={()=>setActiveId(id)} 
+                   className={`glass-panel rounded-2xl p-3 flex justify-between items-center transition-all duration-200 animate-enter ${active ? 'bg-white border-blue-300 shadow-lg scale-105' : 'opacity-80 active:scale-95'}`} style={{animationDelay: delay}}>
+                    <div className="flex items-center gap-4">
+                       <div className={`w-16 h-9 rounded-lg flex items-center justify-center font-bold text-lg holo-note ${d.bg} ${d.text} ${d.border}`}>{d.label}</div>
+                       <span className="text-2xl font-mono font-bold text-gray-800">{counts[id] || 0}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-gray-500">${((parseInt(counts[id])||0)*d.value).toLocaleString()}</span>
+                      <LockToggle isLocked={locks[id]} onToggle={() => toggleLock(id)} />
+                    </div>
+                 </div>
+               )
+            })}
+          </div>
+          <div className="fixed bottom-0 w-full glass-panel border-t border-white/50 rounded-t-[2rem] z-30 flex flex-col shadow-[0_-10px_40px_rgba(0,0,0,0.1)]" style={{height: keypadHeight, background: 'rgba(255,255,255,0.85)'}}>
+            <div className="w-full h-8 flex justify-center items-center cursor-ns-resize touch-none" onMouseDown={()=>isDrag.current=true} onTouchStart={()=>isDrag.current=true}><div className="w-12 h-1.5 bg-gray-300 rounded-full"/></div>
+            <div className="px-6 pb-2 flex justify-between items-center border-b border-gray-200/50"><span className="text-xs font-bold text-gray-400 uppercase flex items-center gap-1">Editing <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{activeItem.label}</span> {isLocked && <Lock size={12} className="text-rose-500"/>}</span><span className="text-xl font-mono font-black text-gray-800">${total.toLocaleString()}</span></div>
+            <div className="flex-1 grid grid-cols-4 gap-2 p-3 pb-safe">
+               {[7,8,9].map(n => <button key={n} onClick={()=>numClick(n)} disabled={isLocked} className="glass-btn-liquid rounded-xl text-2xl font-bold text-gray-700">{n}</button>)}
+               <button onClick={delClick} disabled={isLocked} className="glass-btn-liquid rounded-xl flex items-center justify-center text-rose-500"><Delete size={28}/></button>
+               {[4,5,6].map(n => <button key={n} onClick={()=>numClick(n)} disabled={isLocked} className="glass-btn-liquid rounded-xl text-2xl font-bold text-gray-700">{n}</button>)}
+               <button onClick={clearClick} disabled={isLocked} className="glass-btn-liquid rounded-xl text-xl font-bold text-rose-500">C</button>
+               {[1,2,3].map(n => <button key={n} onClick={()=>numClick(n)} disabled={isLocked} className="glass-btn-liquid rounded-xl text-2xl font-bold text-gray-700">{n}</button>)}
+               <button onClick={nextClick} className="row-span-2 glass-button bg-blue-500 text-white rounded-xl flex items-center justify-center hover:bg-blue-600 active:bg-blue-700 active:scale-90"><ArrowDown size={32}/></button>
+               <button onClick={()=>numClick(0)} disabled={isLocked} className="col-span-3 glass-btn-liquid rounded-xl text-2xl font-bold text-gray-700">0</button>
+            </div>
+          </div>
+        </div>
+      )
+    };
+
+    // --- 分頁 3: Visual ---
+    const VisualPanel = ({ isVisible }) => {
+      const [items, setItems] = useState([]);
+      const [total, setTotal] = useState(0);
+      const [drag, setDrag] = useState(null);
+
+      useEffect(() => setTotal(items.reduce((a, b) => a + b.value, 0)), [items]);
+      const add = (d) => {
+        if(navigator.vibrate) navigator.vibrate(20);
+        const id = Date.now()+Math.random();
+        setItems(p => [...p, { ...d, id, x: (Math.random()-0.5)*30, y: (Math.random()-0.5)*30, rot: Math.random()*360, scale: 1.5, opacity: 0 }]);
+        setTimeout(() => setItems(p => p.map(i => i.id === id ? { ...i, scale: 1.5, opacity: 1 } : i)), 50);
+      };
+      const remove = (id) => { setItems(p => p.filter(i => i.id !== id)); if(navigator.vibrate) navigator.vibrate(15); };
+      const start = (e, type, data) => { const t = e.touches ? e.touches[0] : e; setDrag({ active: true, type, data, x: t.clientX, y: t.clientY }); };
+      const move = (e) => { if(!drag?.active) return; const t = e.touches ? e.touches[0] : e; setDrag(p => ({ ...p, x: t.clientX, y: t.clientY })); };
+      const end = () => {
+        if(!drag?.active) return;
+        if(drag.type === 'src' && drag.y < window.innerHeight * 0.65) add(drag.data);
+        if(drag.type === 'tray' && drag.y > window.innerHeight * 0.65) remove(drag.data.id);
+        setDrag(null);
+      };
+      useEffect(() => {
+        if(drag?.active) { window.addEventListener('mousemove', move); window.addEventListener('mouseup', end); window.addEventListener('touchmove', move, {passive:false}); window.addEventListener('touchend', end); }
+        return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', end); window.removeEventListener('touchmove', move); window.removeEventListener('touchend', end); }
+      }, [drag]);
+
+      if(!isVisible) return null;
+
+      return (
+        <div className="absolute top-[120px] bottom-0 w-full flex flex-col overflow-hidden z-10">
+          <div className="absolute inset-4 bottom-48 rounded-[3rem] bg-white/30 border border-white/40 shadow-inner backdrop-blur-lg overflow-hidden flex items-center justify-center">
+             {items.length===0 && <div className="text-gray-400 font-bold tracking-[0.3em] uppercase animate-pulse">Drag Money Here</div>}
+             {items.map((i, idx) => (
+                <div key={i.id} onMouseDown={(e)=>start(e,'tray',i)} onTouchStart={(e)=>start(e,'tray',i)}
+                  className={`absolute shadow-xl cursor-grab active:cursor-grabbing transition-all duration-500 ${drag?.active && drag.data.id === i.id ? 'opacity-0' : 'opacity-100'} ${i.isCoin?`rounded-full ${i.size}`:`rounded-xl ${i.width} ${i.height} ${i.bg} ${i.border} border flex items-center justify-center font-bold text-lg ${i.color} shadow-md`}`}
+                  style={{ transform: `translate(${i.x}vw, ${i.y}vh) rotate(${i.rot}deg) scale(${i.scale})`, zIndex: idx, background: i.isCoin ? i.style : undefined }}
+                >
+                  {i.isCoin ? <HKDCoin {...i} /> : i.label}
+                </div>
+             ))}
+          </div>
+          <div className="absolute bottom-[11rem] left-0 w-full z-40 px-6 pointer-events-none"><TotalBar total={total} label="Visual Count" className="shadow-2xl !bg-white/80 !border-white/60 backdrop-blur-xl scale-90 origin-bottom" /></div>
+          <div className="absolute bottom-0 w-full h-44 bg-white/60 backdrop-blur-3xl border-t border-white/40 z-30 flex flex-col shadow-2xl">
+             <div className="text-center py-2 text-[10px] text-gray-500 font-bold uppercase tracking-widest"><ArrowDown size={10} className="inline animate-bounce"/> Wallet <ArrowDown size={10} className="inline animate-bounce"/></div>
+             <div className="flex-1 overflow-x-auto flex items-center gap-6 px-8 pb-6 no-scrollbar">
+                {[...NOTE_DATA].map(n => <div key={n.value} onMouseDown={(e)=>start(e,'src',n)} onTouchStart={(e)=>start(e,'src',n)} className="flex-shrink-0 cursor-grab active:cursor-grabbing hover:-translate-y-2 transition-transform active:scale-90"><div className={`w-16 h-9 rounded-lg shadow-md flex items-center justify-center font-bold text-lg holo-note ${n.bg} ${n.text} ${n.border}`}>{n.label}</div></div>)}
+                <div className="w-[1px] h-10 bg-gray-300 mx-2" />
+                {[...COIN_DATA].map(c => <div key={c.value} onMouseDown={(e)=>start(e,'src',c)} onTouchStart={(e)=>start(e,'src',c)} className="flex-shrink-0 cursor-grab active:cursor-grabbing hover:-translate-y-2 transition-transform active:scale-90"><HKDCoin value={c.value} label={c.label} size={c.size} /></div>)}
+             </div>
+          </div>
+          {drag?.active && <div className="fixed pointer-events-none z-50" style={{ left: drag.x, top: drag.y, transform: 'translate(-50%, -50%) rotate(-5deg) scale(1.2)' }}>{drag.data.isCoin ? <HKDCoin {...drag.data} /> : <div className={`w-16 h-9 rounded-lg flex items-center justify-center font-bold text-lg holo-note ${drag.data.bg} ${drag.data.text} ${drag.data.border} shadow-2xl`}>{drag.data.label}</div>}</div>}
+          {drag?.type === 'tray' && <div className="absolute bottom-0 w-full h-1/3 bg-rose-100/80 border-t border-rose-200 flex items-center justify-center text-rose-500 font-bold animate-pulse z-40 backdrop-blur-sm"><Delete size={32} className="mr-2"/> RELEASE TO REMOVE</div>}
+        </div>
+      );
+    };
+
+    // --- Main App ---
+    const App = () => {
+      const [activeTab, setActiveTab] = useState('full');
+      return (
+        <div className="fixed inset-0 flex flex-col overflow-hidden bg-[#F5F5F7] text-gray-800">
+          <LiquidBackground />
+          <div className="relative z-50 flex-none h-[120px] pt-safe flex flex-col items-center justify-center bg-white/60 backdrop-blur-xl border-b border-white/40 shadow-sm">
+            <img src={LOGO_URL} alt="Logo" className="w-12 h-12 rounded-full border-2 border-white shadow-md object-cover mb-2 animate-bounce" style={{animationDuration:'3s'}} />
+            <div className="grid grid-cols-3 p-1 bg-white/50 backdrop-blur-xl border border-white/60 rounded-full shadow-inner w-[300px]">
+                <div className={`absolute top-1 bottom-1 w-[calc(33.33%-0.5rem)] bg-white border border-white/60 shadow-sm rounded-full transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${activeTab === 'full' ? 'left-1' : activeTab === 'notes' ? 'left-[calc(33.33%+0.25rem)]' : 'left-[calc(66.66%-0.5rem)]'}`} />
+                {['full', 'notes', 'visual'].map((tab) => (
+                  <button key={tab} onClick={() => setActiveTab(tab)} className={`relative z-10 py-1.5 rounded-full text-[10px] font-bold flex items-center justify-center gap-1 transition-all duration-300 nav-tab-btn ${activeTab === tab ? 'text-gray-900 scale-105' : 'text-gray-400'}`}>
+                    {tab === 'full' ? <LayoutGrid size={14}/> : tab === 'notes' ? <Banknote size={14}/> : <Sparkles size={14}/>}
+                    {tab === 'full' ? 'STANDARD' : tab === 'notes' ? 'KEYPAD' : 'VISUAL'}
+                  </button>
+                ))}
+            </div>
+          </div>
+          <StandardPanel denoms={[...NOTE_DATA, ...COIN_DATA]} title="FULL COUNT" isVisible={activeTab === 'full'} />
+          <CalculatorPanel denoms={NOTE_DATA} title="EXCHANGE" isVisible={activeTab === 'notes'} />
+          <VisualPanel isVisible={activeTab === 'visual'} />
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
