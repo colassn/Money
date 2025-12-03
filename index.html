@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Money Counter Kinetic Lock</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    /* 基礎設定 */
+    body, html { 
+      background-color: #F5F5F7; 
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+      margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; 
+      touch-action: none; -webkit-user-select: none; user-select: none;
+      -webkit-font-smoothing: antialiased;
+    }
+    
+    /* 高級緩動曲線 */
+    :root {
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    @keyframes float { 0% { transform: translate(0px, 0px) scale(1); } 33% { transform: translate(30px, -50px) scale(1.1); } 66% { transform: translate(-20px, 20px) scale(0.9); } 100% { transform: translate(0px, 0px) scale(1); } }
+    .animate-blob { animation: float 15s infinite ease-in-out; }
+
+    /* 數字心跳 */
+    @keyframes number-pop {
+      0% { transform: scale(1); filter: brightness(1); }
+      40% { transform: scale(1.15); filter: brightness(1.2); color: #2563eb; }
+      100% { transform: scale(1); filter: brightness(1); }
+    }
+    .animate-number-pop { animation: number-pop 0.3s var(--ease-spring); }
+    
+    /* 鎖定圖示微動畫 */
+    @keyframes lock-snap {
+      0% { transform: scale(1) rotate(0deg); }
+      50% { transform: scale(0.8) rotate(-10deg); }
+      100% { transform: scale(1) rotate(0deg); }
+    }
+    .animate-lock-snap { animation: lock-snap 0.4s var(--ease-spring); }
+
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* 玻璃面板 */
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.65);
+      backdrop-filter: blur(25px) saturate(180%);
+      -webkit-backdrop-filter: blur(25px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08);
+    }
+    
+    /* 卡片狀態過渡 */
+    .row-card {
+      transition: all 0.5s var(--ease-spring);
+      will-change: transform, background, box-shadow, filter;
+    }
+    
+    /* 解鎖狀態：懸浮、光澤 */
+    .row-card.unlocked {
+      background: rgba(255, 255, 255, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+      transform: scale(1);
+    }
+    .row-card.unlocked.active {
+      background: rgba(255, 255, 255, 0.85);
+      border-color: rgba(147, 197, 253, 0.5); /* Blue tint */
+      box-shadow: 0 12px 30px -8px rgba(59, 130, 246, 0.2);
+      transform: scale(1.02);
+    }
+
+    /* 鎖定狀態：下沉、磨砂、去色 */
+    .row-card.locked {
+      background: rgba(240, 240, 242, 0.6);
+      border: 1px solid rgba(0, 0, 0, 0.05);
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.06); /* 內陰影造成下陷感 */
+      transform: scale(0.97);
+      filter: grayscale(1) opacity(0.8);
+    }
+
+    /* 按鈕通用 */
+    .glass-button {
+      background: rgba(255, 255, 255, 0.5);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+      transition: all 0.2s var(--ease-smooth);
+      cursor: pointer; color: #374151;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .glass-button:active {
+      background: rgba(255, 255, 255, 0.95);
+      transform: scale(0.9);
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    /* 液態鍵盤 */
+    .glass-btn-liquid {
+      background: rgba(255, 255, 255, 0.4); 
+      backdrop-filter: blur(15px);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+      color: #1f2937; display: flex; align-items: center; justify-content: center;
+      transition: all 0.3s var(--ease-spring);
+    }
+    .glass-btn-liquid:active {
+      background: rgba(255, 255, 255, 0.9);
+      transform: scale(0.85);
+      box-shadow: 0 0 15px rgba(255,255,255,0.8);
+    }
+
+    /* 紙幣 */
+    .holo-note {
+      position: relative; overflow: hidden; backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1), inset 0 0 20px rgba(255,255,255,0.2);
+    }
+    
+    .pt-safe { padding-top: env(safe-area-inset-top); }
+    .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+    .clip-scallop { clip-path: polygon(50% 0%, 61% 2%, 71% 7%, 80% 15%, 87% 24%, 92% 34%, 95% 45%, 95% 57%, 92% 67%, 86% 77%, 78% 85%, 68% 91%, 57% 95%, 45% 97%, 34% 96%, 23% 92%, 14% 85%, 7% 77%, 2% 66%, 0% 55%, 1% 43%, 5% 32%, 11% 22%, 19% 13%, 29% 6%, 40% 1%); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo, useCallback } = React;
+    
+    // Icons
+    const IconBase = ({ children, size = 24, className = "" }) => ( <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg> );
+    const RotateCcw = (p) => <IconBase {...p}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></IconBase>;
+    const Copy = (p) => <IconBase {...p}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></IconBase>;
+    const Check = (p) => <IconBase {...p}><path d="M20 6 9 17l-5-5"/></IconBase>;
+    const Wallet = (p) => <IconBase {...p}><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></IconBase>;
+    const Banknote = (p) => <IconBase {...p}><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></IconBase>;
+    const Sparkles = (p) => <IconBase {...p}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 5H5"/><path d="M19 16v4"/><path d="M23 18h-4"/></IconBase>;
+    const LayoutGrid = (p) => <IconBase {...p}><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></IconBase>;
+    const Lock = (p) => <IconBase {...p}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></IconBase>;
+    const Unlock = (p) => <IconBase {...p}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></IconBase>;
+    const Minus = (p) => <IconBase {...p}><path d="M5 12h14"/></IconBase>;
+    const Delete = (p) => <IconBase {...p}><path d="M20 5H9l-7 7 7 7h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z"/><line x1="18" x2="12" y1="9" y2="15"/><line x1="12" x2="18" y1="9" y2="15"/></IconBase>;
+    const ArrowDown = (p) => <IconBase {...p}><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></IconBase>;
+    const Trash2 = (p) => <IconBase {...p}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></IconBase>;
+    const CreditCard = (p) => <IconBase {...p}><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></IconBase>;
+
+    const LOGO_URL = "https://i.ibb.co/1Yf4N9qy/pack-icon-20240802-010959-0000.png";
+
+    // --- 背景 ---
+    const LiquidBackground = () => (
+      <div className="fixed inset-0 z-0 bg-[#F5F5F7] overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[80vw] h-[80vw] bg-blue-200/40 rounded-full blur-[100px] animate-blob mix-blend-multiply"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[80vw] h-[80vw] bg-purple-200/40 rounded-full blur-[100px] animate-blob mix-blend-multiply" style={{animationDelay: '2s'}}></div>
+        <div className="absolute top-[40%] left-[30%] w-[60vw] h-[60vw] bg-cyan-200/40 rounded-full blur-[100px] animate-blob mix-blend-multiply" style={{animationDelay: '4s'}}></div>
+      </div>
+    );
+
+    const AnimatedNumber = ({ value, className }) => {
+      const [animate, setAnimate] = useState(false);
+      const prev = useRef(value);
+      useEffect(() => { if (value !== prev.current) { setAnimate(true); setTimeout(()=>setAnimate(false), 300); prev.current = value; } }, [value]);
+      return (
+        <span className={`transition-all duration-300 inline-block font-mono tracking-tight ${className} ${animate ? 'animate-number-pop' : ''}`}>
+          ${value.toLocaleString(undefined, { minimumFractionDigits: value % 1 === 0 ? 0 : 1 })}
+        </span>
+      );
+    };
+
+    const TotalBar = ({ total, label = "Total Assets", className="" }) => (
+      <div className={`glass-panel rounded-[2rem] p-4 flex justify-between items-center w-full ${className}`}>
+        <div className="flex flex-col">
+          <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-0.5">{label}</span>
+          <AnimatedNumber value={total} className="text-4xl font-black text-gray-800" />
+        </div>
+        <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center border border-white shadow-sm transition-transform active:scale-75 duration-200">
+          <Wallet className="text-blue-600" size={24} />
+        </div>
+      </div>
+    );
+
+    // --- [新] 鎖定切換組件 (動畫增強) ---
+    const LockToggle = ({ isLocked, onToggle }) => {
+      const [anim, setAnim] = useState(false);
+      const handleToggle = (e) => {
+        e.stopPropagation();
+        if (navigator.vibrate) navigator.vibrate(10); // 震動
+        setAnim(true);
+        setTimeout(()=>setAnim(false), 400);
+        onToggle();
+      };
+      
+      return (
+        <button 
+          onClick={handleToggle}
+          className={`p-2 rounded-lg transition-all duration-300 relative group
+            ${isLocked ? 'bg-rose-100 text-rose-500 shadow-inner' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100/50'}`}
+        >
+          <div className={`transition-transform duration-300 ${anim ? 'animate-lock-snap' : ''}`}>
+            {isLocked 
+              ? <Lock size={16} className="fill-current" />  // 鎖定時實心
+              : <Unlock size={16} />
+            }
+          </div>
+        </button>
+      );
+    };
+
+    const HKDCoin = React.memo(({ value, label, size }) => {
+      if (value === 10) return <div className={`${size} rounded-full border-[1px] border-gray-300 metallic-silver shadow-lg flex items-center justify-center relative overflow-hidden`}><div className="absolute inset-[18%] rounded-full metallic-gold border border-yellow-600/30 flex items-center justify-center shadow-inner"><span className="relative z-10 font-black text-yellow-900 text-xs">{label}</span></div></div>;
+      if (value === 5) return <div className={`${size} rounded-full border-[3px] border-gray-300 metallic-silver flex items-center justify-center`}><div className="w-[85%] h-[85%] rounded-full border border-gray-400/30 flex items-center justify-center"><span className="font-black text-gray-700 text-[70%] drop-shadow-sm">{label}</span></div></div>;
+      if (value === 2 || value === 0.2) {
+        const bg = value === 2 ? "metallic-gold" : "metallic-bronze";
+        const txt = value === 2 ? "text-yellow-900" : "text-orange-900";
+        return <div className={`${size} relative flex items-center justify-center drop-shadow-lg`}><svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-md"><path d="M50 2 C54 2 57 5 59 8 C62 11 66 12 69 10 C73 8 77 9 79 13 C81 16 85 18 88 18 C92 18 95 21 95 25 C96 29 98 32 97 36 C96 40 98 44 100 47 C102 51 100 55 98 58 C96 61 96 65 97 69 C98 73 96 76 93 79 C90 81 89 85 88 89 C86 92 83 94 79 94 C75 95 72 97 69 100 C65 102 61 100 58 98 C55 96 51 96 47 97 C43 98 40 96 37 93 C34 90 30 89 27 90 C23 91 20 89 18 85 C16 82 12 80 10 79 C7 77 5 73 6 69 C7 65 5 61 2 58 C-1 55 -1 51 2 47 C5 44 5 40 4 36 C3 32 5 28 9 26 C12 23 14 19 16 16 C19 13 23 12 26 14 C29 16 33 15 36 12 C39 9 43 8 46 10 C48 11 50 2 50 2 Z" fill="url(#grad_scallop)" stroke="rgba(0,0,0,0.1)" strokeWidth="1"/><defs><linearGradient id="grad_scallop" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor={value===2?"#fef08a":"#fdba74"} /><stop offset="100%" stopColor={value===2?"#eab308":"#c2410c"} /></linearGradient></defs></svg><span className={`absolute font-black ${txt} text-xs`}>{label}</span></div>;
+      }
+      if (value === 1) return <div className={`${size} rounded-full metallic-silver border border-gray-400/30 flex items-center justify-center`}><span className="font-black text-gray-700 text-xs">{label}</span></div>;
+      return <div className={`${size} rounded-full metallic-bronze border border-orange-800/20 flex items-center justify-center`}><span className="font-black text-orange-900 text-[65%]">{label}</span></div>;
+    });
+
+    const NOTE_DATA = [
+      { value: 1000, label: '1000', bg: 'bg-gradient-to-br from-yellow-300/80 to-yellow-500/60', border: 'border-yellow-400/50', text: 'text-yellow-900', width:'w-36', height:'h-16' },
+      { value: 500, label: '500', bg: 'bg-gradient-to-br from-amber-500/80 to-amber-700/60', border: 'border-amber-600/50', text: 'text-white', width:'w-36', height:'h-16' },
+      { value: 100, label: '100', bg: 'bg-gradient-to-br from-red-400/80 to-red-600/60', border: 'border-red-500/50', text: 'text-white', width:'w-36', height:'h-16' },
+      { value: 50, label: '50', bg: 'bg-gradient-to-br from-emerald-400/80 to-emerald-600/60', border: 'border-emerald-500/50', text: 'text-white', width:'w-36', height:'h-16' },
+      { value: 20, label: '20', bg: 'bg-gradient-to-br from-blue-400/80 to-blue-600/60', border: 'border-blue-500/50', text: 'text-white', width:'w-36', height:'h-16' },
+      { value: 10, label: '10', bg: 'bg-gradient-to-br from-purple-400/80 to-purple-600/60', border: 'border-purple-500/50', text: 'text-white', width:'w-36', height:'h-16' },
+    ];
+
+    const COIN_DATA = [
+      { value: 10, label: '$10', isCoin: true, size: 'w-14 h-14' },
+      { value: 5, label: '$5', isCoin: true, size: 'w-12 h-12' },
+      { value: 2, label: '$2', isCoin: true, size: 'w-11 h-11' },
+      { value: 1, label: '$1', isCoin: true, size: 'w-10 h-10' },
+      { value: 0.5, label: '5毫', isCoin: true, size: 'w-9 h-9' },
+      { value: 0.2, label: '2毫', isCoin: true, size: 'w-8 h-8' },
+      { value: 0.1, label: '1毫', isCoin: true, size: 'w-8 h-8' },
+    ];
+
+    // --- Standard Panel (Updated) ---
+    const StandardPanel = ({ denoms, isVisible }) => {
+      const DATA_SET = useMemo(() => denoms.map(d => ({ ...d, id: d.isCoin ? `c${d.value}` : `n${d.value}` })), [denoms]);
+      const [counts, setCounts] = useState({});
+      const [locks, setLocks] = useState({});
+      const [total, setTotal] = useState(0);
+
+      useEffect(() => { const i = {}; DATA_SET.forEach(d => i[d.id] = ''); setCounts(i); }, [DATA_SET]);
+      useEffect(() => { let t = 0; DATA_SET.forEach(d => t += (parseInt(counts[d.id]) || 0) * d.value); setTotal(t); }, [counts, DATA_SET]);
+
+      const toggleLock = (id) => setLocks(prev => ({ ...prev, [id]: !prev[id] }));
+      const updateCount = (id, delta) => {
+        if (locks[id]) return;
+        if (navigator.vibrate) navigator.vibrate(15);
+        setCounts(prev => {
+          const val = parseInt(prev[id]) || 0;
+          const newVal = Math.max(0, val + delta);
+          return { ...prev, [id]: newVal === 0 ? '' : newVal };
+        });
+      };
+      const handleInput = (id, val) => { if (locks[id]) return; if (val === '') { setCounts(prev => ({ ...prev, [id]: '' })); return; } const intVal = parseInt(val); if (!isNaN(intVal) && intVal >= 0) { setCounts(prev => ({ ...prev, [id]: intVal })); } };
+      const handleClearAll = () => { if(navigator.vibrate) navigator.vibrate(20); if(window.confirm("確定要全部清除嗎？")) { const i={}; DATA_SET.forEach(d=>i[d.id]=''); setCounts(i); } };
+
+      if (!isVisible) return null;
+
+      return (
+        <div className="absolute top-[120px] bottom-0 w-full flex flex-col">
+          <div className="flex-none px-4 pt-4 pb-2 z-20 relative pointer-events-auto">
+             <div className="glass-panel rounded-2xl px-2 py-2 flex justify-center">
+                 <button onClick={handleClearAll} className="w-full h-12 rounded-xl glass-button gap-2 text-sm font-bold text-rose-600 bg-rose-50/50 border-rose-200 hover:bg-rose-100/80 transition-all active:scale-95 shadow-sm z-50 cursor-pointer">
+                   <Trash2 size={20} /> CLEAR ALL
+                 </button>
+             </div>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 pb-32 space-y-3 no-scrollbar">
+            {DATA_SET.map(d => {
+              const count = parseInt(counts[d.id]) || 0;
+              const isLocked = locks[d.id];
+              const isActive = count > 0;
+              return (
+                <div key={d.id} className={`glass-panel rounded-3xl p-3 row-card ${isActive && !isLocked ? 'unlocked active' : ''} ${isLocked ? 'locked' : 'unlocked'}`}>
+                   <div className="flex justify-between items-center mb-3">
+                      <div className="flex items-center gap-4">
+                        <div className="w-20 flex justify-center shrink-0">
+                          {d.isCoin ? <HKDCoin {...d} size="w-12 h-12" /> : <div className={`w-16 h-9 rounded-lg shadow-md flex items-center justify-center font-bold text-lg holo-note ${d.bg} ${d.text} ${d.border}`}>{d.label}</div>}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Subtotal</span>
+                          <span className="text-xl font-mono font-bold text-gray-800">${(count * d.value).toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <div className={`flex items-center rounded-xl p-1 border transition-all duration-500 ${isLocked ? 'bg-transparent border-transparent' : 'bg-gray-100/50 border-gray-200/50'}`}>
+                         {/* 使用新的 LockToggle */}
+                         <LockToggle isLocked={isLocked} onToggle={() => toggleLock(d.id)} />
+                         <input type="number" value={counts[d.id]} readOnly={isLocked} onChange={(e)=>handleInput(d.id, e.target.value)} className={`w-12 text-center font-mono text-xl font-bold bg-transparent outline-none transition-colors ${isLocked ? 'text-gray-400' : 'text-gray-700'}`} placeholder="0"/>
+                      </div>
+                   </div>
+                   <div className={`grid grid-cols-4 gap-2 transition-opacity duration-500 ${isLocked ? 'pointer-events-none opacity-20 blur-[1px]' : ''}`}>
+                      <button onClick={()=>updateCount(d.id, -1)} className="glass-button h-10 rounded-lg flex items-center justify-center text-gray-500 hover:bg-white hover:text-red-500"><Minus size={18}/></button>
+                      <button onClick={()=>updateCount(d.id, 1)} className="glass-button h-10 rounded-lg font-bold text-blue-600 bg-blue-50/50 border-blue-100 hover:bg-blue-100">+1</button>
+                      <button onClick={()=>updateCount(d.id, 5)} className="glass-button h-10 rounded-lg font-bold text-indigo-600 bg-indigo-50/50 border-indigo-100 hover:bg-indigo-100">+5</button>
+                      <button onClick={()=>updateCount(d.id, 10)} className="glass-button h-
